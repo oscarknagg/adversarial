@@ -1,0 +1,11 @@
+python -m scripts.train_adversarial --attack FGSM --eps 0.05
+python -m scripts.train_adversarial --attack FGSM --eps 0.1
+python -m scripts.train_adversarial --attack FGSM --eps 0.15
+python -m scripts.train_adversarial --attack FGSM --eps 0.2
+python -m scripts.train_adversarial --attack FGSM --eps 0.25
+
+python -m scripts.eval_adversarial --attack FGSM --model mnist_attack=FGSM_eps=0.05
+python -m scripts.eval_adversarial --attack FGSM --model mnist_attack=FGSM_eps=0.1
+python -m scripts.eval_adversarial --attack FGSM --model mnist_attack=FGSM_eps=0.15
+python -m scripts.eval_adversarial --attack FGSM --model mnist_attack=FGSM_eps=0.2
+python -m scripts.eval_adversarial --attack FGSM --model mnist_attack=FGSM_eps=0.25
