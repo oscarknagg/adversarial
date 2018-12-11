@@ -46,6 +46,7 @@ def iterated_fgsm(model: Module,
                   step: float,
                   eps: float,
                   norm: Union[str, float],
+                  y_target: torch.Tensor = None,
                   random: bool = False,
                   clamp: Tuple[float, float] = (0, 1)):
     """Creates an adversarial sample using the iterated Fast Gradient-Sign Method
@@ -62,6 +63,7 @@ def iterated_fgsm(model: Module,
         eps: Maximum size of adversarial perturbation, larger perturbations will be projected back into the
             L_norm ball
         norm: Type of norm
+        y_target:
         random: Whether to start Iterated FGSM within a random point in the l_norm ball
         clamp: Max and minimum values of elements in the samples i.e. (0, 1) for MNIST
 
@@ -69,6 +71,7 @@ def iterated_fgsm(model: Module,
         x_adv: Adversarially perturbed version of x
     """
     x_adv = x.clone().detach().requires_grad_(True).to(x.device)
+    targeted = y_target is not None
 
     if random:
         x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
@@ -76,13 +79,19 @@ def iterated_fgsm(model: Module,
     for i in range(k):
         _x_adv = x_adv.clone().detach().requires_grad_(True)
 
-        # Gradient descent
         prediction = model(_x_adv)
-        loss = loss_fn(prediction, y)
+        loss = loss_fn(prediction, y_target if targeted else y)
         loss.backward()
 
         with torch.no_grad():
-            x_adv += _x_adv.grad.sign() * step
+            if targeted:
+                # Targeted: Gradient descent with on the loss of the (incorrect) target label
+                # w.r.t. the model parameters
+                x_adv -= _x_adv.grad.sign() * step
+            else:
+                # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
+                # the model parameters
+                x_adv += _x_adv.grad.sign() * step
 
         # Project back into l_norm ball and correct range
         x_adv = project(x, x_adv, norm, eps).clamp(*clamp)
@@ -98,6 +107,7 @@ def pgd(model: Module,
         step: float,
         eps: float,
         norm: Union[str, float],
+        y_target: torch.Tensor = None,
         random: bool = False,
         clamp: Tuple[float, float] = (0, 1)):
     """Creates an adversarial sample using the Projected Gradient Descent Method
@@ -121,6 +131,7 @@ def pgd(model: Module,
         x_adv: Adversarially perturbed version of x
     """
     x_adv = x.clone().detach().requires_grad_(True).to(x.device)
+    targeted = y_target is not None
 
     if random:
         x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
@@ -128,13 +139,19 @@ def pgd(model: Module,
     for i in range(k):
         _x_adv = x_adv.clone().detach().requires_grad_(True)
 
-        # Gradient descent
         prediction = model(_x_adv)
-        loss = loss_fn(prediction, y)
+        loss = loss_fn(prediction, y_target if targeted else y)
         loss.backward()
 
         with torch.no_grad():
-            x_adv += _x_adv.grad * step
+            if targeted:
+                # Targeted: Gradient descent with on the loss of the (incorrect) target label
+                # w.r.t. the model parameters
+                x_adv -= _x_adv.grad.sign() * step
+            else:
+                # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
+                # the model parameters
+                x_adv += _x_adv.grad.sign() * step
 
         # Project back into l_norm ball and correct range
         x_adv = project(x, x_adv, norm, eps).clamp(*clamp)
