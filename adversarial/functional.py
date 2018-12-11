@@ -68,7 +68,9 @@ def iterated_fgsm(model: Module,
     Returns:
         x_adv: Adversarially perturbed version of x
     """
-    x_adv = torch.tensor(x.data, device=x.device, requires_grad=True)
+    # x_adv = torch.tensor(x.data, device=x.device, requires_grad=True)
+    x_adv = x.clone().detach().requires_grad_(True).to(x.device)
+
     if random:
         x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
 
@@ -119,7 +121,9 @@ def pgd(model: Module,
     Returns:
         x_adv: Adversarially perturbed version of x
     """
-    x_adv = torch.tensor(x.data, device=x.device, requires_grad=True)
+    # x_adv = torch.tensor(x.data, device=x.device, requires_grad=True)
+    x_adv = x.clone().detach().requires_grad_(True).to(x.device)
+
     if random:
         x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
 
