@@ -87,9 +87,9 @@ class TestAttacks(unittest.TestCase):
         )
 
     def test_pgd_untargeted(self):
-        k = 40
-        eps = 3
-        step = 0.01
+        k = 100
+        eps = 2.0
+        step = 0.1
         norm = 2
 
         x_adv = pgd(self.model, self.x, self.y, torch.nn.CrossEntropyLoss(), k, step, eps=eps, norm=norm)
@@ -106,7 +106,7 @@ class TestAttacks(unittest.TestCase):
     def test_pgd_targeted(self):
         k = 10
         eps = 5
-        step = 0.1
+        step = 1
         norm = 2
         target = torch.Tensor([0]).long().to(DEVICE)
 

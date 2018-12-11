@@ -120,7 +120,7 @@ def pgd(model: Module,
         y: Corresponding labels
         loss_fn: Loss function to maximise
         k: Number of iterations to make
-        step: Size of step to make at each iteration
+        step: Size of step (i.e. L2 norm) to make at each iteration
         eps: Maximum size of adversarial perturbation, larger perturbations will be projected back into the
             L_norm ball
         norm: Type of norm
@@ -144,14 +144,16 @@ def pgd(model: Module,
         loss.backward()
 
         with torch.no_grad():
+            # Rescale gradients to have norm(2) == step
+            gradients = _x_adv.grad * step / _x_adv.grad.norm(2)
             if targeted:
                 # Targeted: Gradient descent with on the loss of the (incorrect) target label
                 # w.r.t. the model parameters
-                x_adv -= _x_adv.grad.sign() * step
+                x_adv -= gradients
             else:
                 # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
                 # the model parameters
-                x_adv += _x_adv.grad.sign() * step
+                x_adv += gradients
 
         # Project back into l_norm ball and correct range
         x_adv = project(x, x_adv, norm, eps).clamp(*clamp)
