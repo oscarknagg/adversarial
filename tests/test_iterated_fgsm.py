@@ -2,16 +2,20 @@ import unittest
 import torch
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
-from multiprocessing import cpu_count
+import matplotlib.pyplot as plt
 
-from adversarial.functional import boundary
+from adversarial.functional import iterated_fgsm
 from adversarial.models import MNISTClassifier
 from config import PATH
 
 
-class TestBoundaryAttack(unittest.TestCase):
+class TestIteratedFGSMAttack(unittest.TestCase):
     def test_attack(self):
         device = 'cuda'
+        k = 100
+        step = 1
+        eps = 0.3
+        norm = 'inf'
 
         model = MNISTClassifier()
         model.load_state_dict(torch.load(f'{PATH}/models/mnist_natural.pt'))
@@ -27,7 +31,7 @@ class TestBoundaryAttack(unittest.TestCase):
         x = x.to(device)
         y = y.to(device)
 
-        x_adv = boundary(model, x, y, 500)
+        x_adv = iterated_fgsm(model, x, y, torch.nn.CrossEntropyLoss(), k=k, step=step, eps=eps, norm=norm)
 
         # Check that adversarial example is misclassified
         self.assertNotEqual(model(x_adv).argmax(dim=1).item(), y.item())
@@ -35,5 +39,5 @@ class TestBoundaryAttack(unittest.TestCase):
         # Assert that distance between adversarial and natural sample is small
         self.assertLess(
             (torch.norm(x - x_adv, 2).pow(2) / x.numel()).item(),
-            0.1
+            eps
         )
