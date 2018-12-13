@@ -133,3 +133,9 @@ class TestAttacks(unittest.TestCase):
             (torch.norm(self.x - x_adv, 2).pow(2) / self.x.numel()).item(),
             0.1
         )
+
+    def test_local_search_untarget(self):
+        x_adv = local_search(self.model, self.x, self.y, 100)
+
+        # Check that adversarial example is misclassified
+        self.assertNotEqual(self.model(x_adv).argmax(dim=1).item(), self.y.item())

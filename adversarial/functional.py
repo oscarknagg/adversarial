@@ -1,4 +1,5 @@
 from typing import Union, Callable, Tuple
+from functools import reduce
 from collections import deque
 from torch.nn import Module
 import torch
@@ -273,4 +274,87 @@ def boundary(model: Module,
             elif torch.Tensor(orth_step_stats).mean() < 0.2:
                 orthogonal_step *= orth_step_factor
 
+    return x_adv
+
+
+def _perturb(x: torch.Tensor,
+             p: float,
+             i: int,
+             j: int,
+             clamp: Tuple[float, float] = (0, 1)):
+    """Perturbs a pixel in an image
+
+    Args:
+        x: image
+        p: perturbation parameters
+        i: row
+        j: column
+    """
+    if x.size(0) != 1:
+        raise NotImplementedError('Only implemented for single image')
+
+    x[0, :, i, j] = p * torch.sign(x[0, :, i, j])
+
+    return x.clamp(*clamp)
+
+
+def local_search(model: Module,
+                 x: torch.Tensor,
+                 y: torch.Tensor,
+                 k: int,
+                 branching: Union[int, float] = 0.1,
+                 p: float = 1.,
+                 clamp: Tuple[float, float] = (0, 1)):
+    """Performs the local search attack
+
+    This is a black-box (score based) attack first described in
+    https://arxiv.org/pdf/1612.06299.pdf
+
+    Args:
+        model
+        x:
+        y:
+        k: Number of rounds of local search to perform
+        branching: Either fraction of image pixels to search at each round or
+            number of image pixels to search at each round
+
+    Returns:
+        x_adv:
+    """
+    if x.size(0) != 1:
+        # TODO: Attack a whole batch at a time
+        raise NotImplementedError('Only implemented for single image')
+
+    x_adv = x.clone().detach().requires_grad_(False).to(x.device)
+    model.eval()
+
+    data_shape = x_adv.shape[2:]
+    if isinstance(branching, float):
+        branching = int(reduce(lambda x, y: x*y, data_shape) * branching)
+
+    for i in range(k):
+        # Select 10% of pixel locations at random
+        perturb_pixels = torch.randperm(reduce(lambda x, y: x*y, data_shape))[:branching]
+
+        perturb_pixels = torch.stack([perturb_pixels // data_shape[0], perturb_pixels % data_shape[1]]).transpose(1, 0)
+
+        # TODO: vectorised implementation with x_adv.expand() and some smart indexing
+        scores = []
+        for i, j in perturb_pixels:
+            _x_adv = x_adv.clone().detach().requires_grad_(False).to(x.device)
+            _x_adv[0, :, i, j] = 1.
+            _x_adv.clamp_(*clamp)
+            prediction = model(_x_adv).softmax(dim=1)
+            scores.append(prediction[0, y])
+
+            # Early exit if adversarial is found
+            if prediction.argmax(dim=1).item() != y.item():
+                return _x_adv
+
+        # Select best perturbation and continue
+        i_best, j_best = perturb_pixels[torch.stack(scores).argmin()]
+        x_adv[0, :, i_best, j_best] = 1.
+        x_adv.clamp_(*clamp)
+
+    # Attack failed, return sample with lowest score of correct class
     return x_adv
