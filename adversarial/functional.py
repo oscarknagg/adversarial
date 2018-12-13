@@ -304,6 +304,7 @@ def local_search(model: Module,
                  k: int,
                  branching: Union[int, float] = 0.1,
                  p: float = 1.,
+                 d: int = None,
                  clamp: Tuple[float, float] = (0, 1)):
     """Performs the local search attack
 
@@ -317,6 +318,8 @@ def local_search(model: Module,
         k: Number of rounds of local search to perform
         branching: Either fraction of image pixels to search at each round or
             number of image pixels to search at each round
+        p: Size of perturbation
+        d: Neighbourhood square half side length
 
     Returns:
         x_adv:
@@ -332,29 +335,30 @@ def local_search(model: Module,
     if isinstance(branching, float):
         branching = int(reduce(lambda x, y: x*y, data_shape) * branching)
 
-    for i in range(k):
-        # Select 10% of pixel locations at random
+    for _ in range(k):
+        # Select pixel locations at random
         perturb_pixels = torch.randperm(reduce(lambda x, y: x*y, data_shape))[:branching]
 
         perturb_pixels = torch.stack([perturb_pixels // data_shape[0], perturb_pixels % data_shape[1]]).transpose(1, 0)
 
-        # TODO: vectorised implementation with x_adv.expand() and some smart indexing
-        scores = []
-        for i, j in perturb_pixels:
-            _x_adv = x_adv.clone().detach().requires_grad_(False).to(x.device)
-            _x_adv[0, :, i, j] = 1.
-            _x_adv.clamp_(*clamp)
-            prediction = model(_x_adv).softmax(dim=1)
-            scores.append(prediction[0, y])
+        # Kinda hacky but works for MNIST (i.e. 1 channel images)
+        # TODO: multi channel images
+        neighbourhood = x_adv.repeat((branching, 1, 1, 1))
+        perturb_pixels = torch.cat([torch.arange(branching).unsqueeze(-1), perturb_pixels], dim=1)
+        neighbourhood[perturb_pixels[:, 0], 0, perturb_pixels[:, 1], perturb_pixels[:, 2]] = 1
 
-            # Early exit if adversarial is found
-            if prediction.argmax(dim=1).item() != y.item():
-                return _x_adv
+        predictions = model(neighbourhood).softmax(dim=1)
+        scores = predictions[:, y]
 
         # Select best perturbation and continue
-        i_best, j_best = perturb_pixels[torch.stack(scores).argmin()]
+        i_best, j_best = perturb_pixels[scores.argmin(dim=0).item(), 1:]
         x_adv[0, :, i_best, j_best] = 1.
         x_adv.clamp_(*clamp)
+
+        # Early exit if adversarial is found
+        worst_prediction = predictions.argmax(dim=1)[scores.argmin(dim=0).item()]
+        if worst_prediction.item() != y.item():
+            return x_adv
 
     # Attack failed, return sample with lowest score of correct class
     return x_adv
