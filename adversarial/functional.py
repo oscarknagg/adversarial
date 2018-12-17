@@ -39,6 +39,72 @@ def fgsm(model: Module,
     return x_adv
 
 
+def _iterative_gradient(model: Module,
+                        x: torch.Tensor,
+                        y: torch.Tensor,
+                        loss_fn: Callable,
+                        k: int,
+                        step: float,
+                        eps: float,
+                        norm: Union[str, float],
+                        step_norm: Union[str, float],
+                        y_target: torch.Tensor = None,
+                        random: bool = False,
+                        clamp: Tuple[float, float] = (0, 1)):
+    """Base function for PGD and iterated FGSM
+
+    Args:
+        model: Model
+        x: Batch of samples
+        y: Corresponding labels
+        loss_fn: Loss function to maximise
+        k: Number of iterations to make
+        step: Size of step to make at each iteration
+        eps: Maximum size of adversarial perturbation, larger perturbations will be projected back into the
+            L_norm ball
+        norm: Type of norm
+        step_norm: 2 for PGD, 'inf' for iterated FGSM
+        y_target:
+        random: Whether to start Iterated FGSM within a random point in the l_norm ball
+        clamp: Max and minimum values of elements in the samples i.e. (0, 1) for MNIST
+
+    Returns:
+        x_adv: Adversarially perturbed version of x
+    """
+    x_adv = x.clone().detach().requires_grad_(True).to(x.device)
+    targeted = y_target is not None
+
+    if random:
+        x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
+
+    for i in range(k):
+        _x_adv = x_adv.clone().detach().requires_grad_(True)
+
+        prediction = model(_x_adv)
+        loss = loss_fn(prediction, y_target if targeted else y)
+        loss.backward()
+
+        with torch.no_grad():
+            if step_norm == 'inf':
+                gradients = _x_adv.grad.sign() * step
+            else:
+                gradients = _x_adv.grad * step / _x_adv.grad.norm(2)
+
+            if targeted:
+                # Targeted: Gradient descent with on the loss of the (incorrect) target label
+                # w.r.t. the model parameters
+                x_adv -= gradients
+            else:
+                # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
+                # the model parameters
+                x_adv += gradients
+
+        # Project back into l_norm ball and correct range
+        x_adv = project(x, x_adv, norm, eps).clamp(*clamp)
+
+    return x_adv.detach()
+
+
 def iterated_fgsm(model: Module,
                   x: torch.Tensor,
                   y: torch.Tensor,
@@ -71,33 +137,8 @@ def iterated_fgsm(model: Module,
     Returns:
         x_adv: Adversarially perturbed version of x
     """
-    x_adv = x.clone().detach().requires_grad_(True).to(x.device)
-    targeted = y_target is not None
-
-    if random:
-        x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
-
-    for i in range(k):
-        _x_adv = x_adv.clone().detach().requires_grad_(True)
-
-        prediction = model(_x_adv)
-        loss = loss_fn(prediction, y_target if targeted else y)
-        loss.backward()
-
-        with torch.no_grad():
-            if targeted:
-                # Targeted: Gradient descent with on the loss of the (incorrect) target label
-                # w.r.t. the model parameters
-                x_adv -= _x_adv.grad.sign() * step
-            else:
-                # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
-                # the model parameters
-                x_adv += _x_adv.grad.sign() * step
-
-        # Project back into l_norm ball and correct range
-        x_adv = project(x, x_adv, norm, eps).clamp(*clamp)
-
-    return x_adv.detach()
+    return _iterative_gradient(model=model, x=x, y=y, loss_fn=loss_fn, k=k, eps=eps, norm=norm, step=step,
+                               step_norm='inf', y_target=y_target, random=random, clamp=clamp)
 
 
 def pgd(model: Module,
@@ -131,35 +172,8 @@ def pgd(model: Module,
     Returns:
         x_adv: Adversarially perturbed version of x
     """
-    x_adv = x.clone().detach().requires_grad_(True).to(x.device)
-    targeted = y_target is not None
-
-    if random:
-        x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
-
-    for i in range(k):
-        _x_adv = x_adv.clone().detach().requires_grad_(True)
-
-        prediction = model(_x_adv)
-        loss = loss_fn(prediction, y_target if targeted else y)
-        loss.backward()
-
-        with torch.no_grad():
-            # Rescale gradients to have norm(2) == step
-            gradients = _x_adv.grad * step / _x_adv.grad.norm(2)
-            if targeted:
-                # Targeted: Gradient descent with on the loss of the (incorrect) target label
-                # w.r.t. the model parameters
-                x_adv -= gradients
-            else:
-                # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
-                # the model parameters
-                x_adv += gradients
-
-        # Project back into l_norm ball and correct range
-        x_adv = project(x, x_adv, norm, eps).clamp(*clamp)
-
-    return x_adv.detach()
+    return _iterative_gradient(model=model, x=x, y=y, loss_fn=loss_fn, k=k, eps=eps, norm=norm, step=step, step_norm=2,
+                               y_target=y_target, random=random, clamp=clamp)
 
 
 def boundary(model: Module,
@@ -312,7 +326,7 @@ def local_search(model: Module,
     https://arxiv.org/pdf/1612.06299.pdf
 
     Args:
-        model
+        model:
         x:
         y:
         k: Number of rounds of local search to perform
