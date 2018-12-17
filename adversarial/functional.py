@@ -88,7 +88,9 @@ def _iterative_gradient(model: Module,
             if step_norm == 'inf':
                 gradients = _x_adv.grad.sign() * step
             else:
-                gradients = _x_adv.grad * step / _x_adv.grad.norm(2)
+                # .view() assumes batched image data as 4D tensor
+                gradients = _x_adv.grad * step / _x_adv.grad.view(_x_adv.shape[0], -1).norm(step_norm, dim=-1)\
+                    .view(-1, 1, 1, 1)
 
             if targeted:
                 # Targeted: Gradient descent with on the loss of the (incorrect) target label
@@ -98,6 +100,7 @@ def _iterative_gradient(model: Module,
                 # Untargeted: Gradient ascent on the loss of the correct label w.r.t.
                 # the model parameters
                 x_adv += gradients
+
 
         # Project back into l_norm ball and correct range
         x_adv = project(x, x_adv, norm, eps).clamp(*clamp)

@@ -87,40 +87,41 @@ class TestAttacks(unittest.TestCase):
         )
 
     def test_pgd_untargeted(self):
-        k = 100
-        eps = 2.0
+        k = 40
+        eps = 3
         step = 0.1
         norm = 2
 
-        x_adv = pgd(self.model, self.x, self.y, torch.nn.CrossEntropyLoss(), k, step, eps=eps, norm=norm)
+        # Perform an untarget PGD attack on a batch of MNIST images
+        x = torch.cat([self.x, self.x])
+        y = torch.cat([self.y, self.y])
+        x_adv = pgd(self.model, x, y, torch.nn.CrossEntropyLoss(), k, step, eps=eps, norm=norm)
 
-        # Check that adversarial example is misclassified
-        self.assertNotEqual(self.model(x_adv).argmax(dim=1).item(), self.y.item())
+        # Check that adversarial examples are misclassified
+        self.assertTrue(torch.all(self.model(x_adv).argmax(dim=1) != self.y))
 
-        # Assert that distance between adversarial and natural sample is small
-        self.assertLess(
-            (self.x - x_adv).norm(norm).item(),
-            eps
-        )
+        # Assert that distance between adversarial and natural samples are less or equal to specified eps
+        delta = x - x_adv
+        self.assertTrue(torch.all(delta.view(delta.shape[0], -1).norm(norm, dim=-1) < eps))
 
     def test_pgd_targeted(self):
         k = 10
-        eps = 5
+        eps = 3
         step = 1
         norm = 2
-        target = torch.Tensor([0]).long().to(DEVICE)
+        target = torch.Tensor([0, 0]).long().to(DEVICE)
 
-        x_adv = pgd(self.model, self.x, self.y, torch.nn.CrossEntropyLoss(), k, step,
+        x = torch.cat([self.x, self.x])
+        y = torch.cat([self.y, self.y])
+        x_adv = pgd(self.model, x, y, torch.nn.CrossEntropyLoss(), k, step,
                     y_target=target, eps=eps, norm=norm)
 
         # Check that adversarial example is misclassified
-        self.assertNotEqual(self.model(x_adv).argmax(dim=1).item(), self.y.item())
+        self.assertTrue(torch.all(self.model(x_adv).argmax(dim=1) == target))
 
-        # Assert that distance between adversarial and natural sample is small
-        self.assertLess(
-            (self.x - x_adv).norm(norm).item(),
-            eps
-        )
+        # Assert that distance between adversarial and natural samples are less or equal to specified eps
+        delta = x - x_adv
+        self.assertTrue(torch.all(delta.view(delta.shape[0], -1).norm(norm, dim=-1) < eps))
 
     def test_boundary_untargeted(self):
         x_adv = boundary(self.model, self.x, self.y, 500)
