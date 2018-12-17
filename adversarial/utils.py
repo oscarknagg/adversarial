@@ -5,7 +5,19 @@ import torch
 
 
 def project(x: torch.Tensor, x_adv: torch.Tensor, norm: Union[str, int], eps: float):
-    """Projects x_adv into the l_norm ball around x"""
+    """Projects x_adv into the l_norm ball around x
+
+    Assumes x and x_adv are a batch of Tensors
+
+    Args:
+        x:
+        x_adv:
+        norm:
+        eps:
+
+    Returns:
+        x_adv:
+    """
     if x.shape != x_adv.shape:
         raise ValueError('Input Tensors must have the same shape')
 
@@ -14,8 +26,16 @@ def project(x: torch.Tensor, x_adv: torch.Tensor, norm: Union[str, int], eps: fl
         x_adv = torch.max(torch.min(x_adv, x + eps), x - eps)
     else:
         delta = x_adv - x
-        if delta.norm(norm) > eps:
-            delta *= eps / delta.norm(norm)
+
+        # Assume x and x_adv are batched tensors where the first dimension is
+        # a batch dimension
+        mask = delta.view(delta.shape[0], -1).norm(norm, dim=1) <= eps
+
+        scaling_factor = delta.view(delta.shape[0], -1).norm(norm, dim=1)
+        scaling_factor[mask] = eps
+
+        # .view() assumes batched images as a 4D Tensor
+        delta *= eps / scaling_factor.view(-1, 1, 1, 1)
 
         x_adv = x + delta
 
