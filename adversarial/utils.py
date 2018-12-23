@@ -4,10 +4,10 @@ import numpy as np
 import torch
 
 
-def project(x: torch.Tensor, x_adv: torch.Tensor, norm: Union[str, int], eps: float):
+def project(x: torch.Tensor, x_adv: torch.Tensor, norm: Union[str, int], eps: float) -> torch.Tensor:
     """Projects x_adv into the l_norm ball around x
 
-    Assumes x and x_adv are a batch of Tensors
+    Assumes x and x_adv are 4D Tensors representing batches of images
 
     Args:
         x:
@@ -40,6 +40,28 @@ def project(x: torch.Tensor, x_adv: torch.Tensor, norm: Union[str, int], eps: fl
         x_adv = x + delta
 
     return x_adv
+
+
+def random_perturbation(x: torch.Tensor, norm: Union[str, int], eps: float) -> torch.Tensor:
+    """Applies a random l_norm bounded perturbation to x
+
+    Assumes x is a 4D Tensor representing a batch of images
+
+    Args:
+        x: Batch of images
+        norm:
+        eps:
+
+    Returns:
+        x_perturbed:
+    """
+    perturbation = torch.normal(torch.zeros_like(x), torch.ones_like(x))
+    if norm == 'inf':
+        perturbation = torch.sign(perturbation) * eps
+    else:
+        perturbation = project(torch.zeros_like(x), perturbation, norm, eps)
+
+    return x + perturbation
 
 
 def generate_misclassified_sample(model: Module,
