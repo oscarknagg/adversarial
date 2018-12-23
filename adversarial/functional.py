@@ -4,7 +4,7 @@ from collections import deque
 from torch.nn import Module
 import torch
 
-from adversarial.utils import project, generate_misclassified_sample
+from adversarial.utils import project, generate_misclassified_sample, random_perturbation
 
 
 def fgsm(model: Module,
@@ -12,7 +12,7 @@ def fgsm(model: Module,
          y: torch.Tensor,
          loss_fn: Callable,
          eps: float,
-         clamp: Tuple[float, float] = (0, 1)):
+         clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Creates an adversarial sample using the Fast Gradient-Sign Method (FGSM)
 
     This is a white-box attack.
@@ -50,7 +50,7 @@ def _iterative_gradient(model: Module,
                         step_norm: Union[str, float],
                         y_target: torch.Tensor = None,
                         random: bool = False,
-                        clamp: Tuple[float, float] = (0, 1)):
+                        clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Base function for PGD and iterated FGSM
 
     Args:
@@ -75,7 +75,7 @@ def _iterative_gradient(model: Module,
     targeted = y_target is not None
 
     if random:
-        x_adv = x_adv + torch.normal(torch.zeros_like(x_adv), torch.ones_like(x_adv)) * eps
+        x_adv = random_perturbation(x_adv, norm, eps)
 
     for i in range(k):
         _x_adv = x_adv.clone().detach().requires_grad_(True)
@@ -118,7 +118,7 @@ def iterated_fgsm(model: Module,
                   norm: Union[str, float],
                   y_target: torch.Tensor = None,
                   random: bool = False,
-                  clamp: Tuple[float, float] = (0, 1)):
+                  clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Creates an adversarial sample using the iterated Fast Gradient-Sign Method
 
     This is a white-box attack.
@@ -154,7 +154,7 @@ def pgd(model: Module,
         norm: Union[str, float],
         y_target: torch.Tensor = None,
         random: bool = False,
-        clamp: Tuple[float, float] = (0, 1)):
+        clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Creates an adversarial sample using the Projected Gradient Descent Method
 
     This is a white-box attack.
@@ -186,7 +186,7 @@ def boundary(model: Module,
              orthogonal_step: float = 1e-2,
              perpendicular_step: float = 1e-2,
              initial: torch.Tensor = None,
-             clamp: Tuple[float, float] = (0, 1)):
+             clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Implements the boundary attack
 
     This is a black box attack that doesn't require knowledge of the model
@@ -298,7 +298,7 @@ def _perturb(x: torch.Tensor,
              p: float,
              i: int,
              j: int,
-             clamp: Tuple[float, float] = (0, 1)):
+             clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Perturbs a pixel in an image
 
     Args:
@@ -322,7 +322,7 @@ def local_search(model: Module,
                  branching: Union[int, float] = 0.1,
                  p: float = 1.,
                  d: int = None,
-                 clamp: Tuple[float, float] = (0, 1)):
+                 clamp: Tuple[float, float] = (0, 1)) -> torch.Tensor:
     """Performs the local search attack
 
     This is a black-box (score based) attack first described in
