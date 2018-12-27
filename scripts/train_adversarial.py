@@ -1,6 +1,6 @@
 from torch import nn, optim
-from torch.utils.data import DataLoader
-from torchvision import transforms, datasets
+from torch.utils.data import DataLoader, Subset
+from torchvision import transforms, datasets, models
 from multiprocessing import cpu_count
 from olympic.callbacks import *
 import argparse
@@ -8,6 +8,8 @@ import olympic
 
 from adversarial.models import MNISTClassifier
 from adversarial.attacks import *
+from adversarial.functional import *
+from adversarial.datasets import RestrictedImageNet
 from config import PATH
 
 
@@ -19,44 +21,60 @@ parser.add_argument('--dataset', default='mnist')
 parser.add_argument('--attack')
 parser.add_argument('--eps', type=float)
 parser.add_argument('--step', type=float)
-parser.add_argument('--step', type=int, default=1)
+parser.add_argument('--k', type=int)
 parser.add_argument('--norm', default='inf')
 parser.add_argument('--device', default='cuda')
+parser.add_argument('--epochs', type=int)
 args = parser.parse_args()
 
-if args.dataset != 'mnist':
-    raise NotImplementedError
 
 if args.norm != 'inf':
     norm = int(args.norm)
 else:
     norm = args.norm
 
-attack_class = {
-    'FGSM': FGSM,
-    'FGSM_k': FGSM_k,
-    'PGD': PGD
-}[args.attack]
-
 
 ########
 # Data #
 ########
-transform = transforms.Compose([
-   transforms.ToTensor(),
-])
+if args.dataset == 'mnist':
+    transform = transforms.Compose([
+       transforms.ToTensor(),
+    ])
 
-train = datasets.MNIST(f'{PATH}/data/', train=True, transform=transform, download=True)
-val = datasets.MNIST(f'{PATH}/data/', train=False, transform=transform, download=True)
+    train = datasets.MNIST(f'{PATH}/data/', train=True, transform=transform, download=True)
+    val = datasets.MNIST(f'{PATH}/data/', train=False, transform=transform, download=True)
 
-train_loader = DataLoader(train, batch_size=128, num_workers=cpu_count())
-val_loader = DataLoader(val, batch_size=128, num_workers=cpu_count())
+    train_loader = DataLoader(train, batch_size=128, num_workers=cpu_count())
+    val_loader = DataLoader(val, batch_size=128, num_workers=cpu_count())
+elif args.dataset == 'restricted_imagenet':
+    rng = np.random.RandomState(0)
+    data = RestrictedImageNet()
+
+    indices = np.array(range(len(data)))
+    rng.shuffle(indices)
+    train_indices = indices[:int(len(indices)*0.9)]
+    val_indices = indices[int(len(indices)*0.9):]
+
+    train = Subset(data, train_indices)
+    val = Subset(data, val_indices)
+
+    train_loader = DataLoader(train, batch_size=128, num_workers=cpu_count())
+    val_loader = DataLoader(val, batch_size=128, num_workers=cpu_count())
+else:
+    raise ValueError('Unsupported dataset')
 
 
 #########
 # Model #
 #########
-model = MNISTClassifier().to(args.device)
+if args.dataset == 'mnist':
+    model = MNISTClassifier().to(args.device)
+elif args.dataset == 'restricted_imagenet':
+    model = models.resnet50(num_classes=RestrictedImageNet().num_classes()).to(args.device)
+else:
+    raise ValueError('Unsupported norm')
+
 optimiser = optim.SGD(model.parameters(), lr=0.1)
 loss_fn = nn.CrossEntropyLoss()
 
@@ -82,7 +100,12 @@ def adversarial_update(model, optimiser, loss_fn, x, y, epoch, eps, step, k, nor
     model.train()
 
     # Adversial perturbation
-    x_adv = attack_class(eps, step, k, norm).create_adversarial_sample(model, x, y, loss_fn)
+    if norm == 'inf':
+        x_adv = iterated_fgsm(model, x, y, loss_fn, k=k, step=step, eps=eps, norm='inf')
+    elif norm == 2:
+        x_adv = pgd(model, x, y, loss_fn, k=k, step=step, eps=eps, norm=2)
+    else:
+        raise ValueError('Unsupported norm')
 
     optimiser.zero_grad()
     y_pred = model(x_adv)
@@ -98,7 +121,7 @@ olympic.fit(
     optimiser,
     loss_fn,
     dataloader=train_loader,
-    epochs=10,
+    epochs=args.epochs,
     metrics=['accuracy'],
     callbacks=callbacks,
     update_fn=adversarial_update,
