@@ -13,6 +13,9 @@ from adversarial.datasets import RestrictedImageNet
 from config import PATH
 
 
+torch.backends.cudnn.benchmark = True
+
+
 ##############
 # Parameters #
 ##############
@@ -25,6 +28,8 @@ parser.add_argument('--k', type=int)
 parser.add_argument('--norm', default='inf')
 parser.add_argument('--device', default='cuda')
 parser.add_argument('--epochs', type=int)
+parser.add_argument('--batch-size', type=int)
+parser.add_argument('--random-start', type=lambda x: x.lower()[0] == 't', default=True)  # Quick hack to extract boolean
 args = parser.parse_args()
 
 
@@ -45,8 +50,8 @@ if args.dataset == 'mnist':
     train = datasets.MNIST(f'{PATH}/data/', train=True, transform=transform, download=True)
     val = datasets.MNIST(f'{PATH}/data/', train=False, transform=transform, download=True)
 
-    train_loader = DataLoader(train, batch_size=128, num_workers=cpu_count())
-    val_loader = DataLoader(val, batch_size=128, num_workers=cpu_count())
+    train_loader = DataLoader(train, batch_size=args.batch_size, num_workers=cpu_count())
+    val_loader = DataLoader(val, batch_size=args.batch_size, num_workers=cpu_count())
 elif args.dataset == 'restricted_imagenet':
     rng = np.random.RandomState(0)
     data = RestrictedImageNet()
@@ -59,8 +64,8 @@ elif args.dataset == 'restricted_imagenet':
     train = Subset(data, train_indices)
     val = Subset(data, val_indices)
 
-    train_loader = DataLoader(train, batch_size=128, num_workers=cpu_count())
-    val_loader = DataLoader(val, batch_size=128, num_workers=cpu_count())
+    train_loader = DataLoader(train, batch_size=args.batch_size, num_workers=cpu_count())
+    val_loader = DataLoader(val, batch_size=args.batch_size, num_workers=cpu_count())
 else:
     raise ValueError('Unsupported dataset')
 
@@ -88,7 +93,7 @@ callbacks = [
     ModelCheckpoint(
         f'{PATH}/models/{args.dataset}_attack={args.attack}_eps={args.eps}.pt',
         save_best_only=True,
-        monitor='val_loss',
+        monitor='val_accuracy',
         verbose=True
     ),
     CSVLogger(f'{PATH}/logs/{args.dataset}_attack={args.attack}_eps={args.eps}.csv')
@@ -101,9 +106,9 @@ def adversarial_update(model, optimiser, loss_fn, x, y, epoch, eps, step, k, nor
 
     # Adversial perturbation
     if norm == 'inf':
-        x_adv = iterated_fgsm(model, x, y, loss_fn, k=k, step=step, eps=eps, norm='inf')
+        x_adv = iterated_fgsm(model, x, y, loss_fn, k=k, step=step, eps=eps, norm='inf', random=args.random_start)
     elif norm == 2:
-        x_adv = pgd(model, x, y, loss_fn, k=k, step=step, eps=eps, norm=2)
+        x_adv = pgd(model, x, y, loss_fn, k=k, step=step, eps=eps, norm=2, random=args.random_start)
     else:
         raise ValueError('Unsupported norm')
 
