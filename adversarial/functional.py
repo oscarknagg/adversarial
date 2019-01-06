@@ -195,17 +195,17 @@ def boundary(model: Module,
     https://arxiv.org/pdf/1712.04248.pdf
 
     Args:
-        model:
-        x:
-        y:
+        model: Model to be attacked
+        x: Batched image data
+        y: Corresponding labels
         k: Number of steps to take
         orthogonal_step: orthogonal step size (delta in paper)
         perpendicular_step: perpendicular step size (epsilon in paper)
-        initial:
-        clamp:
+        initial: Initial attack image to start with. If this is None then use random noise
+        clamp: Max and minimum values of elements in the samples i.e. (0, 1) for MNIST
 
     Returns:
-        x_adv:
+        x_adv: Best i.e. closest adversarial example for x
     """
     orth_step_stats = deque(maxlen=30)
     perp_step_stats = deque(maxlen=30)
@@ -329,9 +329,9 @@ def local_search(model: Module,
     https://arxiv.org/pdf/1612.06299.pdf
 
     Args:
-        model:
-        x:
-        y:
+        model: Model to attack
+        x: Batched image data
+        y: Corresponding labels
         k: Number of rounds of local search to perform
         branching: Either fraction of image pixels to search at each round or
             number of image pixels to search at each round
@@ -339,7 +339,7 @@ def local_search(model: Module,
         d: Neighbourhood square half side length
 
     Returns:
-        x_adv:
+        x_adv: Adversarial version of x
     """
     if x.size(0) != 1:
         # TODO: Attack a whole batch at a time
