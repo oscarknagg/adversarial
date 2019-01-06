@@ -7,7 +7,16 @@ See [this Medium article](https://towardsdatascience.com/know-your-enemy-7f7c503
 for a discussion on how to use and defend against
 the projected gradient attack.
 
-![PGD Attack](https://github.com/oscarknagg/few-shot/blob/master/assets/pgd_attack_imagenet_example.png)
+Example adversarial attack created using this repo.
+
+![PGD Attack](https://github.com/oscarknagg/adversarial/blob/master/assets/pgd_attack_imagenet_example.png)
+
+
+Cool fact - adversarially trained discriminative (_not generative!_)
+models can be used to interpolate between classes by creating
+large-epsilon adversarial examples against them.
+
+![MNIST Class Interpolation](https://media.giphy.com/media/NlGeQeG4jUViIcZRAD/giphy.gif)
 
 # Contents
 
