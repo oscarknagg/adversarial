@@ -63,7 +63,7 @@ class RestrictedImageNet(Dataset):
 
     }
 
-    def __init__(self, transforms):
+    def __init__(self, transform_list=None):
         """Dataset class representing representing a restricted ImageNet
 
 
@@ -83,7 +83,7 @@ class RestrictedImageNet(Dataset):
         self.datasetid_to_class_id = self.df.to_dict()['class_id']
 
         # Setup transforms
-        if transforms is None:
+        if transform_list is None:
             self.transform = transforms.Compose([
                 transforms.RandomResizedCrop(224, scale=(0.75, 1)),
                 transforms.RandomHorizontalFlip(),
@@ -91,7 +91,7 @@ class RestrictedImageNet(Dataset):
 
             ])
         else:
-            self.transform = transforms
+            self.transform = transform_list
 
     def __getitem__(self, item):
         instance = Image.open(self.datasetid_to_filepath[item])
